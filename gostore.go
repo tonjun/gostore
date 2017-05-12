@@ -35,6 +35,10 @@ type Store interface {
 
 	// ListDel deletes the item from the list
 	ListDel(key string, value *Item) error
+
+	// OnItemExpire adds the callback function to the list off callback functions
+	// called when an item expires
+	OnItemExpire(func(key string, item *Item))
 }
 
 // NewStore returns a new instance of Store
@@ -98,6 +102,8 @@ type store struct {
 	lpush chan listPushReq
 	lget  chan listGetReq
 	ldel  chan listDelReq
+
+	itemExpireCb func(string, *Item)
 }
 
 func (s *store) Init() {
@@ -307,4 +313,8 @@ func (s *store) getTree(key string) *btree.BTree {
 		tree = t
 	}
 	return tree
+}
+
+func (s *store) OnItemExpire(cb func(key string, item *Item)) {
+	s.itemExpireCb = cb
 }
