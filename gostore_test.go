@@ -70,13 +70,15 @@ var _ = Describe("GoStore", func() {
 	It("race condition should not occur on Get()", func(done Done) {
 		store.Init()
 		store.Set("key0", &gostore.Item{"0", "data"}, 0)
-		for i := 0; i < 10; i++ {
+		var wg sync.WaitGroup
+		for i := 0; i < 5; i++ {
+			wg.Add(1)
 			go func(j int) {
 				err := store.Set(fmt.Sprintf("key%d", j), &gostore.Item{fmt.Sprintf("%d", j), "data"}, 0)
 				Expect(err).Should(BeNil())
+				wg.Done()
 			}(i)
 		}
-		var wg sync.WaitGroup
 		for i := 0; i < 10; i++ {
 			wg.Add(1)
 			go func(j int) {
@@ -109,6 +111,73 @@ var _ = Describe("GoStore", func() {
 		Expect(i).Should(BeNil())
 		Expect(found).To(BeFalse())
 		Expect(err).To(BeNil())
+	})
+
+	It("ListPush() should add the given item to the list", func() {
+		store.Init()
+		err := store.ListPush("one", &gostore.Item{"a", "a data"})
+		Expect(err).To(BeNil())
+		err = store.ListPush("one", &gostore.Item{"b", "b data"})
+		Expect(err).To(BeNil())
+		err = store.ListPush("one", &gostore.Item{"c", "c data"})
+		Expect(err).To(BeNil())
+
+		items, found, err := store.ListGet("one")
+		Expect(err).To(BeNil())
+		Expect(len(items)).To(Equal(3))
+		Expect(found).To(BeTrue())
+		if len(items) == 3 {
+			Expect(items[0].ID).To(Equal("a"))
+			Expect(items[1].ID).To(Equal("b"))
+			Expect(items[2].ID).To(Equal("c"))
+
+			Expect(items[0].Value.(string)).To(Equal("a data"))
+			Expect(items[1].Value.(string)).To(Equal("b data"))
+			Expect(items[2].Value.(string)).To(Equal("c data"))
+		}
+	})
+
+	It("ListDel() should remove an item from the list", func() {
+		store.Init()
+		err := store.ListPush("one", &gostore.Item{"a", "1data"})
+		Expect(err).To(BeNil())
+		err = store.ListPush("one", &gostore.Item{"b", "1data"})
+		Expect(err).To(BeNil())
+		err = store.ListPush("one", &gostore.Item{"c", "0data"})
+		Expect(err).To(BeNil())
+
+		items, found, err := store.ListGet("one")
+		Expect(err).To(BeNil())
+		Expect(len(items)).To(Equal(3))
+		Expect(found).To(BeTrue())
+		if len(items) == 3 {
+			Expect(items[0].ID).To(Equal("a"))
+			Expect(items[1].ID).To(Equal("b"))
+			Expect(items[2].ID).To(Equal("c"))
+			Expect(items[0].Value.(string)).To(Equal("1data"))
+			Expect(items[1].Value.(string)).To(Equal("1data"))
+			Expect(items[2].Value.(string)).To(Equal("0data"))
+		}
+
+		err = store.ListDel("one", &gostore.Item{"b", "1data"})
+		Expect(err).To(BeNil())
+
+		items, found, err = store.ListGet("one")
+		Expect(err).To(BeNil())
+		Expect(len(items)).To(Equal(2))
+		Expect(found).To(BeTrue())
+		if len(items) == 2 {
+			Expect(items[0].ID).To(Equal("a"))
+			Expect(items[1].ID).To(Equal("c"))
+			Expect(items[0].Value.(string)).To(Equal("1data"))
+			Expect(items[1].Value.(string)).To(Equal("0data"))
+		}
+
+		items, found, err = store.ListGet("two")
+		Expect(err).To(BeNil())
+		Expect(len(items)).To(Equal(0))
+		Expect(found).To(BeFalse())
+
 	})
 
 })

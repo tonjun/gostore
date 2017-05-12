@@ -9,15 +9,41 @@ import (
 	"github.com/google/btree"
 )
 
+// Store is the interface to the in-memory store
 type Store interface {
+
+	// Init initializes the store
 	Init()
+
+	// Close stops all internal goroutines
 	Close()
+
+	// Set sets a value to a key given an optional duration.
 	Set(key string, value *Item, d time.Duration) error
+
+	// Get returns the item given the key
 	Get(key string) (item *Item, found bool, err error)
+
+	// Del deletes the item for the key
 	Del(key string) error
+
+	// ListPush adds the item to the list of items
 	ListPush(key string, value *Item) error
-	ListDel(key string, value *Item)
-	ListGet(key string) []*Item
+
+	// ListGet returns the list of items given a key
+	ListGet(key string) (items []*Item, found bool, err error)
+
+	// ListDel deletes the item from the list
+	ListDel(key string, value *Item) error
+}
+
+// NewStore returns a new instance of Store
+func NewStore() Store {
+	s := &store{
+		kval:  make(map[string]Item),
+		ktree: make(map[string]*btree.BTree),
+	}
+	return s
 }
 
 type setReq struct {
@@ -36,6 +62,32 @@ type delReq struct {
 	resp chan bool
 }
 
+type listPushReq struct {
+	key  string
+	item Item
+}
+
+type listGetReq struct {
+	key      string
+	resp     chan []*Item
+	notFound chan bool
+}
+
+type listDelReq struct {
+	key  string
+	item Item
+	resp chan bool
+}
+
+type treeItem struct {
+	Key   string
+	Value *Item
+}
+
+func (a treeItem) Less(b btree.Item) bool {
+	return a.Key < b.(treeItem).Key
+}
+
 // Store implements a key/value in-memory storage
 type store struct {
 	kval  map[string]Item
@@ -43,21 +95,18 @@ type store struct {
 	set   chan setReq
 	get   chan getReq
 	del   chan delReq
+	lpush chan listPushReq
+	lget  chan listGetReq
+	ldel  chan listDelReq
 }
 
-// NewStore returns a new instance of Store
-func NewStore() Store {
-	s := &store{
-		kval: make(map[string]Item),
-	}
-	return s
-}
-
-// Init initializes internal goroutines
 func (s *store) Init() {
 	s.set = make(chan setReq)
 	s.get = make(chan getReq)
 	s.del = make(chan delReq)
+	s.lpush = make(chan listPushReq)
+	s.lget = make(chan listGetReq)
+	s.ldel = make(chan listDelReq)
 	go func() {
 		defer func() {
 			fmt.Println("Store closed")
@@ -68,7 +117,7 @@ func (s *store) Init() {
 				if !ok {
 					return
 				}
-				log.Printf("set key: \"%s\" item id: \"%s\"", r.key, r.item.ID)
+				//log.Printf("set key: \"%s\" item id: \"%s\"", r.key, r.item.ID)
 				s.kval[r.key] = r.item
 
 			case r := <-s.get:
@@ -82,21 +131,47 @@ func (s *store) Init() {
 				delete(s.kval, r.key)
 				r.resp <- true
 
+			case r := <-s.lpush:
+				ti := treeItem{
+					Key:   r.item.ID,
+					Value: &r.item,
+				}
+				s.getTree(r.key).ReplaceOrInsert(ti)
+
+			case r := <-s.lget:
+				if _, ok := s.ktree[r.key]; !ok {
+					r.notFound <- true
+				} else {
+					items := make([]*Item, 0)
+					s.getTree(r.key).Ascend(func(a btree.Item) bool {
+						items = append(items, a.(treeItem).Value)
+						return true
+					})
+					r.resp <- items
+				}
+
+			case r := <-s.ldel:
+				ti := treeItem{
+					Key:   r.item.ID,
+					Value: &r.item,
+				}
+				s.getTree(r.key).Delete(ti)
+				r.resp <- true
+
 			}
 		}
 	}()
 }
 
-// Close stops all internal goroutines
 func (s *store) Close() {
 	if s.set != nil {
 		close(s.set)
 	}
 }
 
-// Set sets a value to a key given an optional duration.
 func (s *store) Set(key string, value *Item, d time.Duration) error {
 	if s.set == nil {
+		log.Printf("ERROR: Init must be called first")
 		return fmt.Errorf("ERROR: Init must be called first")
 	}
 	if value == nil {
@@ -117,7 +192,6 @@ func (s *store) Set(key string, value *Item, d time.Duration) error {
 	return nil
 }
 
-// Get returns the item given the key
 func (s *store) Get(key string) (item *Item, found bool, err error) {
 	req := &getReq{
 		key:      key,
@@ -138,7 +212,6 @@ func (s *store) Get(key string) (item *Item, found bool, err error) {
 	}
 }
 
-// Del deletes the item for the key
 func (s *store) Del(key string) error {
 	if len(key) == 0 {
 		return fmt.Errorf("Invalid key")
@@ -156,17 +229,82 @@ func (s *store) Del(key string) error {
 	return nil
 }
 
-// ListPush adds the item to the list of items
 func (s *store) ListPush(key string, value *Item) error {
+	if s.set == nil {
+		log.Printf("ERROR: Init must be called first")
+		return fmt.Errorf("ERROR: Init must be called first")
+	}
+	if value == nil {
+		return fmt.Errorf("ERROR: nil value")
+	}
+	if len(key) == 0 || len(value.ID) == 0 {
+		return fmt.Errorf("invalid input")
+	}
+	req := listPushReq{
+		key:  key,
+		item: *value,
+	}
+	select {
+	case s.lpush <- req:
+	case <-time.After(3 * time.Second):
+		return fmt.Errorf("ERROR: channel timeout")
+	}
 	return nil
 }
 
-// ListDel deletes the item from the list
-func (s *store) ListDel(key string, value *Item) {
+func (s *store) ListDel(key string, value *Item) error {
+	if s.set == nil {
+		log.Printf("ERROR: Init must be called first")
+		return fmt.Errorf("ERROR: Init must be called first")
+	}
+	if value == nil {
+		return fmt.Errorf("ERROR: nil value")
+	}
+	if len(key) == 0 || len(value.ID) == 0 {
+		return fmt.Errorf("invalid input")
+	}
+	req := listDelReq{
+		key:  key,
+		item: *value,
+		resp: make(chan bool),
+	}
+	select {
+	case s.ldel <- req:
+	case <-time.After(3 * time.Second):
+		return fmt.Errorf("Del channel timeout")
+	}
+	<-req.resp
+	return nil
 }
 
-// ListGet returns the list of items given a key
-func (s *store) ListGet(key string) []*Item {
+func (s *store) ListGet(key string) ([]*Item, bool, error) {
 	var items []*Item
-	return items
+
+	req := listGetReq{
+		key:      key,
+		resp:     make(chan []*Item),
+		notFound: make(chan bool),
+	}
+	select {
+	case s.lget <- req:
+	case <-time.After(3 * time.Second):
+		return nil, false, fmt.Errorf("Get channel timeout")
+	}
+	select {
+	case items = <-req.resp:
+		return items, true, nil
+	case <-req.notFound:
+		return make([]*Item, 0), false, nil
+	}
+}
+
+func (s *store) getTree(key string) *btree.BTree {
+	var tree *btree.BTree
+	if t, ok := s.ktree[key]; !ok {
+		tree = btree.New(32)
+		s.ktree[key] = tree
+	} else {
+		tree = t
+	}
+	return tree
 }
