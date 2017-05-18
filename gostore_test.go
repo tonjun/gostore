@@ -25,13 +25,13 @@ var _ = Describe("GoStore", func() {
 	})
 
 	It("Calling Set() before calling Init() should fail with an error", func() {
-		err := store.Set("mykey", &gostore.Item{"1", "hello"}, 0)
+		err := store.Set(&gostore.Item{Key: "mykey", ID: "1", Value: "hello"}, 0)
 		Expect(err).ShouldNot(BeNil())
 	})
 
 	It("Setting item for a key should receive the same item on get", func() {
 		store.Init()
-		err := store.Set("mykey", &gostore.Item{"1", "hello"}, 0)
+		err := store.Set(&gostore.Item{Key: "mykey", ID: "1", Value: "hello"}, 0)
 		Expect(err).Should(BeNil())
 		i, found, err := store.Get("mykey")
 		Expect(err).Should(BeNil())
@@ -58,7 +58,7 @@ var _ = Describe("GoStore", func() {
 		for i := 0; i < 10; i++ {
 			wg.Add(1)
 			go func(j int) {
-				err := store.Set("key1", &gostore.Item{fmt.Sprintf("%d", j), "data"}, 0)
+				err := store.Set(&gostore.Item{Key: "key1", ID: fmt.Sprintf("%d", j), Value: "data"}, 0)
 				Expect(err).Should(BeNil())
 				wg.Done()
 			}(i)
@@ -69,12 +69,12 @@ var _ = Describe("GoStore", func() {
 
 	It("race condition should not occur on Get()", func(done Done) {
 		store.Init()
-		store.Set("key0", &gostore.Item{"0", "data"}, 0)
+		store.Set(&gostore.Item{Key: "key0", ID: "0", Value: "data"}, 0)
 		var wg sync.WaitGroup
 		for i := 0; i < 5; i++ {
 			wg.Add(1)
 			go func(j int) {
-				err := store.Set(fmt.Sprintf("key%d", j), &gostore.Item{fmt.Sprintf("%d", j), "data"}, 0)
+				err := store.Set(&gostore.Item{Key: fmt.Sprintf("key%d", j), ID: fmt.Sprintf("%d", j), Value: "data"}, 0)
 				Expect(err).Should(BeNil())
 				wg.Done()
 			}(i)
@@ -97,7 +97,7 @@ var _ = Describe("GoStore", func() {
 	It("Del() should delete the key from the store", func() {
 		store.Init()
 
-		store.Set("keyone", &gostore.Item{"data", "data"}, 0)
+		store.Set(&gostore.Item{Key: "keyone", ID: "data", Value: "data"}, 0)
 
 		i, found, err := store.Get("keyone")
 		Expect(i).ShouldNot(BeNil())
@@ -115,11 +115,11 @@ var _ = Describe("GoStore", func() {
 
 	It("ListPush() should add the given item to the list", func() {
 		store.Init()
-		err := store.ListPush("one", &gostore.Item{"a", "a data"})
+		err := store.ListPush("one", &gostore.Item{ID: "a", Value: "a data"})
 		Expect(err).To(BeNil())
-		err = store.ListPush("one", &gostore.Item{"b", "b data"})
+		err = store.ListPush("one", &gostore.Item{ID: "b", Value: "b data"})
 		Expect(err).To(BeNil())
-		err = store.ListPush("one", &gostore.Item{"c", "c data"})
+		err = store.ListPush("one", &gostore.Item{ID: "c", Value: "c data"})
 		Expect(err).To(BeNil())
 
 		items, found, err := store.ListGet("one")
@@ -139,11 +139,11 @@ var _ = Describe("GoStore", func() {
 
 	It("ListDel() should remove an item from the list", func() {
 		store.Init()
-		err := store.ListPush("one", &gostore.Item{"a", "1data"})
+		err := store.ListPush("one", &gostore.Item{ID: "a", Value: "1data"})
 		Expect(err).To(BeNil())
-		err = store.ListPush("one", &gostore.Item{"b", "1data"})
+		err = store.ListPush("one", &gostore.Item{ID: "b", Value: "1data"})
 		Expect(err).To(BeNil())
-		err = store.ListPush("one", &gostore.Item{"c", "0data"})
+		err = store.ListPush("one", &gostore.Item{ID: "c", Value: "0data"})
 		Expect(err).To(BeNil())
 
 		items, found, err := store.ListGet("one")
@@ -159,7 +159,7 @@ var _ = Describe("GoStore", func() {
 			Expect(items[2].Value.(string)).To(Equal("0data"))
 		}
 
-		err = store.ListDel("one", &gostore.Item{"b", "1data"})
+		err = store.ListDel("one", &gostore.Item{ID: "b", Value: "1data"})
 		Expect(err).To(BeNil())
 
 		items, found, err = store.ListGet("one")
