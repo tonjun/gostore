@@ -18,8 +18,8 @@ type Store interface {
 	// Close stops all internal goroutines
 	Close()
 
-	// Set sets a value to a key given an optional duration.
-	Set(key string, value *Item, d time.Duration) error
+	// Set saves the item in the store given an optional expiry duration.
+	Set(item *Item, d time.Duration) error
 
 	// Get returns the item given the key
 	Get(key string) (item *Item, found bool, err error)
@@ -38,20 +38,20 @@ type Store interface {
 
 	// OnItemExpire adds the callback function to the list off callback functions
 	// called when an item expires
-	OnItemExpire(func(key string, item *Item))
+	OnItemExpire(func(item *Item))
 }
 
 // NewStore returns a new instance of Store
 func NewStore() Store {
 	s := &store{
-		kval:  make(map[string]Item),
-		ktree: make(map[string]*btree.BTree),
+		kval:      make(map[string]Item),
+		ktree:     make(map[string]*btree.BTree),
+		forExpiry: btree.New(32),
 	}
 	return s
 }
 
 type setReq struct {
-	key  string
 	item Item
 }
 
@@ -103,7 +103,9 @@ type store struct {
 	lget  chan listGetReq
 	ldel  chan listDelReq
 
-	itemExpireCb func(string, *Item)
+	forExpiry *btree.BTree // list of items to be checked for expiry
+
+	itemExpireCb func(*Item)
 }
 
 func (s *store) Init() {
@@ -114,9 +116,13 @@ func (s *store) Init() {
 	s.lget = make(chan listGetReq)
 	s.ldel = make(chan listDelReq)
 	go func() {
+		ticker := time.NewTicker(500 * time.Millisecond)
+
 		defer func() {
-			fmt.Println("Store closed")
+			//fmt.Println("Store closed")
+			ticker.Stop()
 		}()
+
 		for {
 			select {
 			case r, ok := <-s.set:
@@ -124,7 +130,17 @@ func (s *store) Init() {
 					return
 				}
 				//log.Printf("set key: \"%s\" item id: \"%s\"", r.key, r.item.ID)
-				s.kval[r.key] = r.item
+				s.kval[r.item.Key] = r.item
+				if !r.item.expiresAt.IsZero() {
+
+					// add to forExpiry tree
+					ti := treeItem{
+						Key:   r.item.Key,
+						Value: &r.item,
+					}
+					s.forExpiry.ReplaceOrInsert(ti)
+
+				}
 
 			case r := <-s.get:
 				if val, ok := s.kval[r.key]; ok {
@@ -134,7 +150,7 @@ func (s *store) Init() {
 				}
 
 			case r := <-s.del:
-				delete(s.kval, r.key)
+				s.deleteItem(r.key)
 				r.resp <- true
 
 			case r := <-s.lpush:
@@ -164,6 +180,9 @@ func (s *store) Init() {
 				s.getTree(r.key).Delete(ti)
 				r.resp <- true
 
+			case <-ticker.C:
+				s.checkExpiredItem()
+
 			}
 		}
 	}()
@@ -175,20 +194,22 @@ func (s *store) Close() {
 	}
 }
 
-func (s *store) Set(key string, value *Item, d time.Duration) error {
+func (s *store) Set(item *Item, d time.Duration) error {
 	if s.set == nil {
 		log.Printf("ERROR: Init must be called first")
 		return fmt.Errorf("ERROR: Init must be called first")
 	}
-	if value == nil {
-		return fmt.Errorf("ERROR: nil value")
+	if item == nil {
+		return fmt.Errorf("ERROR: nil item")
 	}
-	if len(key) == 0 || len(value.ID) == 0 {
-		return fmt.Errorf("invalid input")
+	if len(item.Key) == 0 || len(item.ID) == 0 {
+		return fmt.Errorf("invalid item")
+	}
+	if d > 0 {
+		item.expiresAt = time.Now().Add(d)
 	}
 	req := &setReq{
-		key:  key,
-		item: *value,
+		item: *item,
 	}
 	select {
 	case s.set <- *req:
@@ -315,6 +336,39 @@ func (s *store) getTree(key string) *btree.BTree {
 	return tree
 }
 
-func (s *store) OnItemExpire(cb func(key string, item *Item)) {
+func (s *store) OnItemExpire(cb func(item *Item)) {
 	s.itemExpireCb = cb
+}
+
+func (s *store) checkExpiredItem() {
+	n := time.Now()
+	s.forExpiry.Ascend(func(a btree.Item) bool {
+		i := a.(treeItem).Value
+		d := n.Unix() - i.expiresAt.Unix()
+		key := i.Key
+		if d >= 0 {
+			//log.Printf("item: key: %s expired. diff: %d", key, d)
+			go func(k string, v Item) {
+				// trigger the OnItemExpire callback
+				s.itemExpireCb(&v)
+			}(key, *i)
+			go s.Del(key)
+		} else {
+			//log.Printf("item: key: %s not yet expired. diff: %d", key, d)
+		}
+		return true
+	})
+}
+
+func (s *store) deleteItem(key string) {
+	if val, ok := s.kval[key]; ok {
+		if !val.expiresAt.IsZero() {
+			ti := treeItem{
+				Key:   val.Key,
+				Value: &val,
+			}
+			s.forExpiry.Delete(ti)
+		}
+	}
+	delete(s.kval, key)
 }
