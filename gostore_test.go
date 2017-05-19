@@ -25,13 +25,13 @@ var _ = Describe("GoStore", func() {
 	})
 
 	It("Calling Set() before calling Init() should fail with an error", func() {
-		err := store.Set(&gostore.Item{Key: "mykey", ID: "1", Value: "hello"}, 0)
+		err := store.Put(&gostore.Item{Key: "mykey", ID: "1", Value: "hello"}, 0)
 		Expect(err).ShouldNot(BeNil())
 	})
 
 	It("Setting item for a key should receive the same item on get", func() {
 		store.Init()
-		err := store.Set(&gostore.Item{Key: "mykey", ID: "1", Value: "hello"}, 0)
+		err := store.Put(&gostore.Item{Key: "mykey", ID: "1", Value: "hello"}, 0)
 		Expect(err).Should(BeNil())
 		i, found, err := store.Get("mykey")
 		Expect(err).Should(BeNil())
@@ -58,7 +58,7 @@ var _ = Describe("GoStore", func() {
 		for i := 0; i < 10; i++ {
 			wg.Add(1)
 			go func(j int) {
-				err := store.Set(&gostore.Item{Key: "key1", ID: fmt.Sprintf("%d", j), Value: "data"}, 0)
+				err := store.Put(&gostore.Item{Key: "key1", ID: fmt.Sprintf("%d", j), Value: "data"}, 0)
 				Expect(err).Should(BeNil())
 				wg.Done()
 			}(i)
@@ -69,12 +69,12 @@ var _ = Describe("GoStore", func() {
 
 	It("race condition should not occur on Get()", func(done Done) {
 		store.Init()
-		store.Set(&gostore.Item{Key: "key0", ID: "0", Value: "data"}, 0)
+		store.Put(&gostore.Item{Key: "key0", ID: "0", Value: "data"}, 0)
 		var wg sync.WaitGroup
 		for i := 0; i < 5; i++ {
 			wg.Add(1)
 			go func(j int) {
-				err := store.Set(&gostore.Item{Key: fmt.Sprintf("key%d", j), ID: fmt.Sprintf("%d", j), Value: "data"}, 0)
+				err := store.Put(&gostore.Item{Key: fmt.Sprintf("key%d", j), ID: fmt.Sprintf("%d", j), Value: "data"}, 0)
 				Expect(err).Should(BeNil())
 				wg.Done()
 			}(i)
@@ -97,7 +97,7 @@ var _ = Describe("GoStore", func() {
 	It("Del() should delete the key from the store", func() {
 		store.Init()
 
-		store.Set(&gostore.Item{Key: "keyone", ID: "data", Value: "data"}, 0)
+		store.Put(&gostore.Item{Key: "keyone", ID: "data", Value: "data"}, 0)
 
 		i, found, err := store.Get("keyone")
 		Expect(i).ShouldNot(BeNil())

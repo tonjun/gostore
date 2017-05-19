@@ -19,7 +19,7 @@ type Store interface {
 	Close()
 
 	// Set saves the item in the store given an optional expiry duration.
-	Set(item *Item, d time.Duration) error
+	Put(item *Item, d time.Duration) error
 
 	// Get returns the item given the key
 	Get(key string) (item *Item, found bool, err error)
@@ -181,7 +181,7 @@ func (s *store) Init() {
 				r.resp <- true
 
 			case <-ticker.C:
-				s.checkExpiredItem()
+				s.checkExpiredItems()
 
 			}
 		}
@@ -194,7 +194,7 @@ func (s *store) Close() {
 	}
 }
 
-func (s *store) Set(item *Item, d time.Duration) error {
+func (s *store) Put(item *Item, d time.Duration) error {
 	if s.set == nil {
 		log.Printf("ERROR: Init must be called first")
 		return fmt.Errorf("ERROR: Init must be called first")
@@ -340,7 +340,7 @@ func (s *store) OnItemExpire(cb func(item *Item)) {
 	s.itemExpireCb = cb
 }
 
-func (s *store) checkExpiredItem() {
+func (s *store) checkExpiredItems() {
 	n := time.Now()
 	s.forExpiry.Ascend(func(a btree.Item) bool {
 		i := a.(treeItem).Value

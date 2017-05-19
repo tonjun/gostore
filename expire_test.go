@@ -37,11 +37,11 @@ var _ = Describe("Expire", func() {
 			ch <- *item
 		})
 
-		err := store.Set(&gostore.Item{ID: "d1", Key: "k1", Value: "d1"}, 200*time.Millisecond)
+		err := store.Put(&gostore.Item{ID: "d1", Key: "k1", Value: "d1"}, 200*time.Millisecond)
 		Expect(err).Should(BeNil())
-		err = store.Set(&gostore.Item{ID: "d2", Key: "k2", Value: "d2"}, 20*time.Second)
+		err = store.Put(&gostore.Item{ID: "d2", Key: "k2", Value: "d2"}, 20*time.Second)
 		Expect(err).Should(BeNil())
-		err = store.Set(&gostore.Item{ID: "d1", Key: "k3", Value: "d1"}, 20*time.Second)
+		err = store.Put(&gostore.Item{ID: "d1", Key: "k3", Value: "d1"}, 20*time.Second)
 		Expect(err).Should(BeNil())
 
 		time.Sleep(1 * time.Second)
@@ -66,15 +66,15 @@ var _ = Describe("Expire", func() {
 			ch <- true
 		})
 
-		store.Set(&gostore.Item{Key: "keyone", ID: "1", Value: "data1"}, 200*time.Millisecond)
+		store.Put(&gostore.Item{Key: "keyone", ID: "1", Value: "data1"}, 200*time.Millisecond)
 		time.Sleep(50 * time.Millisecond)
-		store.Set(&gostore.Item{Key: "keyone", ID: "2", Value: "data2"}, 5*time.Second)
+		store.Put(&gostore.Item{Key: "keyone", ID: "2", Value: "data2"}, 5*time.Second)
 		Consistently(ch, "1s").ShouldNot(Receive())
 
-		store.Set(&gostore.Item{Key: "keyone", ID: "1", Value: "data1"}, 5*time.Second)
+		store.Put(&gostore.Item{Key: "keyone", ID: "1", Value: "data1"}, 5*time.Second)
 		Consistently(ch, "1s").ShouldNot(Receive())
 
-		store.Set(&gostore.Item{Key: "keyone", ID: "1", Value: "data1"}, 200*time.Millisecond)
+		store.Put(&gostore.Item{Key: "keyone", ID: "1", Value: "data1"}, 200*time.Millisecond)
 		Eventually(ch, "1s").Should(Receive())
 		Consistently(ch, "1s").ShouldNot(Receive())
 	})
