@@ -24,7 +24,7 @@ var _ = Describe("GoStore", func() {
 		time.Sleep(5 * time.Millisecond)
 	})
 
-	It("Calling Set() before calling Init() should fail with an error", func() {
+	It("Calling Put() before calling Init() should fail with an error", func() {
 		err := store.Put(&gostore.Item{Key: "mykey", ID: "1", Value: "hello"}, 0)
 		Expect(err).ShouldNot(BeNil())
 	})
