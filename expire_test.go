@@ -24,13 +24,13 @@ var _ = Describe("Expire", func() {
 		store.Close()
 	})
 
-	It("OnItemExpire callback should be called when an item expires", func() {
+	It("OnItemDidExpire callback should be called when an item expires", func() {
 
 		i := &gostore.Item{}
 
 		ch := make(chan gostore.Item)
 
-		store.OnItemExpire(func(item *gostore.Item) {
+		store.OnItemDidExpire(func(item *gostore.Item) {
 			log.Printf("Item expired callback!: key: \"%s\" value: \"%s\"", item.Key, item.Value.(string))
 			Expect(item.Key).To(Equal("k1"))
 			Expect(item.Value).To(Equal("d1"))
@@ -62,7 +62,7 @@ var _ = Describe("Expire", func() {
 
 		ch := make(chan bool)
 
-		store.OnItemExpire(func(item *gostore.Item) {
+		store.OnItemDidExpire(func(item *gostore.Item) {
 			ch <- true
 		})
 

@@ -36,9 +36,9 @@ type Store interface {
 	// ListDel deletes the item from the list
 	ListDel(key string, value *Item) error
 
-	// OnItemExpire adds the callback function to the list off callback functions
+	// OnItemDidExpire adds the callback function to the list off callback functions
 	// called when an item expires
-	OnItemExpire(func(item *Item))
+	OnItemDidExpire(func(item *Item))
 }
 
 // NewStore returns a new instance of Store
@@ -336,7 +336,7 @@ func (s *store) getTree(key string) *btree.BTree {
 	return tree
 }
 
-func (s *store) OnItemExpire(cb func(item *Item)) {
+func (s *store) OnItemDidExpire(cb func(item *Item)) {
 	s.itemExpireCb = cb
 }
 
@@ -349,7 +349,7 @@ func (s *store) checkExpiredItems() {
 		if d >= 0 {
 			//log.Printf("item: key: %s expired. diff: %d", key, d)
 			go func(k string, v Item) {
-				// trigger the OnItemExpire callback
+				// trigger the OnItemDidExpire callback
 				s.itemExpireCb(&v)
 			}(key, *i)
 			go s.Del(key)
