@@ -2,7 +2,6 @@ package gostore
 
 import (
 	"fmt"
-	"log"
 	"time"
 
 	"github.com/google/btree"
@@ -29,9 +28,9 @@ func (s *listStore) init() {
 	s.lget = make(chan listGetReq)
 	s.ldel = make(chan listDelReq)
 	go func() {
-		defer func() {
-			log.Printf("listStore closed")
-		}()
+		//defer func() {
+		//	log.Printf("listStore closed")
+		//}()
 
 		for {
 			select {
@@ -41,7 +40,13 @@ func (s *listStore) init() {
 					Key:   r.item.ID,
 					Value: &r.item,
 				}
+				l := s.getTree(r.key).Len()
 				s.getTree(r.key).ReplaceOrInsert(ti)
+
+				// if tree len changed, trigger callback
+				if l != s.getTree(r.key).Len() {
+					s.triggerListDidChange(r.key)
+				}
 
 			case r := <-s.lget:
 				if _, ok := s.ktree[r.key]; !ok {
@@ -60,8 +65,14 @@ func (s *listStore) init() {
 					Key:   r.item.ID,
 					Value: &r.item,
 				}
+				l := s.getTree(r.key).Len()
 				s.getTree(r.key).Delete(ti)
 				r.resp <- true
+
+				// if tree len changed, trigger callback
+				if l != s.getTree(r.key).Len() {
+					s.triggerListDidChange(r.key)
+				}
 
 			case <-s.close:
 				return
@@ -149,4 +160,16 @@ func (s *listStore) getTree(key string) *btree.BTree {
 
 func (s *listStore) onListDidChange(cb func(string, []*Item)) {
 	s.listChangeCb = cb
+}
+
+func (s *listStore) triggerListDidChange(key string) {
+	if s.listChangeCb != nil {
+		//log.Printf("triggerListDidChange: key: \"%s\"", key)
+		go func() {
+			items, found, _ := s.listGet(key)
+			if found {
+				s.listChangeCb(key, items)
+			}
+		}()
+	}
 }

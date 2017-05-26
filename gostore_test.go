@@ -180,4 +180,112 @@ var _ = Describe("GoStore", func() {
 
 	})
 
+	It("Should call OnListDidChange when adding an item to a list", func(done Done) {
+		store.Init()
+		c := make(chan string)
+		store.OnListDidChange(func(key string, items []*gostore.Item) {
+			defer GinkgoRecover()
+			Expect(len(items)).To(Equal(1))
+			if len(items) == 1 {
+				Expect(items[0].ID).To(Equal("a"))
+				Expect(items[0].Value.(string)).To(Equal("a data"))
+			}
+			c <- key
+		})
+		store.ListPush("one", &gostore.Item{ID: "a", Value: "a data"})
+		Expect(<-c).To(Equal("one"))
+
+		store.OnListDidChange(func(key string, items []*gostore.Item) {
+			defer GinkgoRecover()
+			Expect(len(items)).To(Equal(2))
+			if len(items) == 2 {
+				Expect(items[0].ID).To(Equal("a"))
+				Expect(items[0].Value.(string)).To(Equal("a data"))
+				Expect(items[1].ID).To(Equal("b"))
+				Expect(items[1].Value.(string)).To(Equal("b data"))
+			}
+			c <- key
+		})
+		store.ListPush("one", &gostore.Item{ID: "b", Value: "b data"})
+		Expect(<-c).To(Equal("one"))
+
+		close(done)
+	})
+
+	It("Should not call OnListDidChange when adding an existing item to the list", func(done Done) {
+		store.Init()
+		c := make(chan string)
+		store.OnListDidChange(func(key string, items []*gostore.Item) {
+			defer GinkgoRecover()
+			Expect(len(items)).To(Equal(1))
+			if len(items) == 1 {
+				Expect(items[0].ID).To(Equal("a"))
+				Expect(items[0].Value.(string)).To(Equal("a data"))
+			}
+			c <- key
+		})
+		store.ListPush("one", &gostore.Item{ID: "a", Value: "a data"})
+		Expect(<-c).To(Equal("one"))
+
+		store.ListPush("one", &gostore.Item{ID: "a", Value: "a data"})
+		Consistently(c).ShouldNot(Receive())
+
+		close(done)
+	})
+
+	It("Should call OnListDidChange when removing an item from the list", func(done Done) {
+		store.Init()
+		c := make(chan string)
+
+		// add 1st item
+		store.OnListDidChange(func(key string, items []*gostore.Item) {
+			defer GinkgoRecover()
+			Expect(len(items)).To(Equal(1))
+			if len(items) == 1 {
+				Expect(items[0].ID).To(Equal("a"))
+				Expect(items[0].Value.(string)).To(Equal("a data"))
+			}
+			c <- key
+		})
+		store.ListPush("one", &gostore.Item{ID: "a", Value: "a data"})
+		Expect(<-c).To(Equal("one"))
+
+		// add 2nd item
+		store.OnListDidChange(func(key string, items []*gostore.Item) {
+			defer GinkgoRecover()
+			Expect(len(items)).To(Equal(2))
+			if len(items) == 2 {
+				Expect(items[0].ID).To(Equal("a"))
+				Expect(items[0].Value.(string)).To(Equal("a data"))
+				Expect(items[1].ID).To(Equal("b"))
+				Expect(items[1].Value.(string)).To(Equal("b data"))
+			}
+			c <- key
+		})
+		store.ListPush("one", &gostore.Item{ID: "b", Value: "b data"})
+		Expect(<-c).To(Equal("one"))
+
+		// remove 1st item
+		store.OnListDidChange(func(key string, items []*gostore.Item) {
+			defer GinkgoRecover()
+			Expect(len(items)).To(Equal(1))
+			if len(items) == 1 {
+				Expect(items[0].ID).To(Equal("b"))
+				Expect(items[0].Value.(string)).To(Equal("b data"))
+			}
+			c <- key
+		})
+		store.ListDel("one", &gostore.Item{ID: "a", Value: "a data"})
+		Expect(<-c).To(Equal("one"))
+
+		// remove again should not trigger OnListDidChange
+		store.OnListDidChange(func(key string, items []*gostore.Item) {
+			c <- key
+		})
+		store.ListDel("one", &gostore.Item{ID: "a", Value: "a data"})
+		Consistently(c).ShouldNot(Receive())
+
+		close(done)
+	})
+
 })

@@ -33,7 +33,7 @@ func (s *kvStore) init() {
 		ticker := time.NewTicker(500 * time.Millisecond)
 
 		defer func() {
-			log.Println("kvStore closed")
+			//log.Println("kvStore closed")
 			ticker.Stop()
 		}()
 
@@ -43,7 +43,6 @@ func (s *kvStore) init() {
 				if !ok {
 					return
 				}
-				//log.Printf("set key: \"%s\" item id: \"%s\"", r.key, r.item.ID)
 				s.kval[r.item.Key] = r.item
 				if !r.item.expiresAt.IsZero() {
 
