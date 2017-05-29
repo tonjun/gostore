@@ -121,11 +121,15 @@ func (s *store) ListGet(key string) ([]*Item, bool, error) {
 func (s *store) OnItemDidExpire(cb func(item *Item)) {
 	if s.kv != nil {
 		s.kv.onItemDidExpire(cb)
+	} else {
+		panic(fmt.Errorf("Init not yet called"))
 	}
 }
 
 func (s *store) OnListDidChange(cb func(string, []*Item)) {
 	if s.ls != nil {
 		s.ls.onListDidChange(cb)
+	} else {
+		panic(fmt.Errorf("Init not yet called"))
 	}
 }
