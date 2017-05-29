@@ -13,6 +13,7 @@ type kvStore struct {
 	set          chan setReq
 	get          chan getReq
 	del          chan delReq
+	close        chan bool
 	forExpiry    *btree.BTree // list of items to be checked for expiry
 	itemExpireCb func(*Item)
 }
@@ -21,6 +22,7 @@ func newKVStore() *kvStore {
 	return &kvStore{
 		kval:      make(map[string]Item),
 		forExpiry: btree.New(32),
+		close:     make(chan bool),
 	}
 }
 
@@ -69,15 +71,20 @@ func (s *kvStore) init() {
 			case <-ticker.C:
 				s.checkExpiredItems()
 
+			case <-s.close:
+				return
+
 			}
 		}
 	}()
 }
 
 func (s *kvStore) closeStore() {
-	if s.set != nil {
-		close(s.set)
-	}
+	//if s.set != nil {
+	//	close(s.set)
+	//	s.set = nil
+	//}
+	s.close <- true
 }
 
 func (s *kvStore) put(item *Item, d time.Duration) error {
@@ -149,7 +156,7 @@ func (s *kvStore) checkExpiredItems() {
 		d := n.Unix() - i.expiresAt.Unix()
 		key := i.Key
 		if d >= 0 {
-			//log.Printf("item: key: %s expired. diff: %d", key, d)
+			//log.Printf("******* item: key: %s expired. diff: %d", key, d)
 			if s.itemExpireCb != nil {
 				go func(k string, v Item) {
 					// trigger the OnItemDidExpire callback
