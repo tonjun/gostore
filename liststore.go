@@ -2,6 +2,7 @@ package gostore
 
 import (
 	"fmt"
+	//"log"
 	"time"
 
 	"github.com/google/btree"
@@ -28,9 +29,9 @@ func (s *listStore) init() {
 	s.lget = make(chan listGetReq)
 	s.ldel = make(chan listDelReq)
 	go func() {
-		//defer func() {
-		//	log.Printf("listStore closed")
-		//}()
+		defer func() {
+			//log.Printf("listStore closed")
+		}()
 
 		for {
 			select {
